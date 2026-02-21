@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "mcp__claude-brain__brain",
+      "Bash(npm test:*)",
+      "Bash(npx vitest:*)",
+      "Bash(git -C /c/Users/dem/Documents/Neural-Bridge status)",
+      "Bash(gh auth status:*)",
+      "Bash(gh auth:*)",
+      "Bash(git -C /c/Users/dem/Documents/Neural-Bridge init:*)",
+      "Bash(git -C /c/Users/dem/Documents/Neural-Bridge status --short)",
+      "Bash(git -C /c/Users/dem/Documents/Neural-Bridge add -A)",
+      "Bash(git -C /c/Users/dem/Documents/Neural-Bridge rm:*)"
+    ]
+  }
+}

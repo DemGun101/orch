@@ -1,0 +1,199 @@
+---
+created: '2026-02-13'
+updated: '2026-02-19'
+last_updated: '2026-02-19'
+---
+### Decision: How to set up Supabase MCP in Claude Code:
+
+1. Create .mcp.json in project root with this config:
+{
+
+
+**Date:** 2026-02-13
+**Context:** How to set up Supabase MCP in Claude Code:
+**Decision:** How to set up Supabase MCP in Claude Code:
+
+1. Create .mcp.json in project root with this config:
+{
+  "mcpServers": {
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp"
+    }
+  }
+}
+
+2. Key gotchas:
+- MUST include "type": "http" — just "url" alone fails with schema validation error
+- The old npx approach (npx supabase-mcp-server) no longer works — package doesn't exist on npm
+- No need for manual API keys in the config — auth is handled via OAuth (browser login on first connect)
+- For CI/headless environments, use headers with Bearer token and add ?project_ref= to URL
+- After creating/editing .mcp.json, must restart Claude Code for it to pick up changes
+
+3. Alternative CLI setup: claude mcp add --transport http supabase https://mcp.supabase.com/mcp
+**Reasoning:** 
+
+---
+### Decision: Session summary: Built complete sign-up flow for Asia Supply Partners. Two-screen flow: sign-up form
+
+**Date:** 2026-02-13
+**Context:** Session summary: Built complete sign-up flow for Asia Supply Partners
+**Decision:** Session summary: Built complete sign-up flow for Asia Supply Partners. Two-screen flow: sign-up form (firstName, lastName, email with Zod validation + RHF) → OTP verification (6-digit input with auto-advance, paste support, 10min timer, 60s resend cooldown). Uses Supabase built-in OTP (not custom otp_codes table). API route POST /api/auth/signup uses admin.createUser() + signInWithOtp(). Client-side verifyOtp() for verification. Brand colors updated to blue-600 primary (#2563eb) in oklch format. Auth layout has split-screen: form left, gradient right panel with stats. Installed @supabase/ssr, @supabase/supabase-js, sonner. Added shadcn button/input/label/card/sonner components. User needs to configure Supabase email template with {{ .Token }} for OTP codes.
+**Reasoning:** 
+
+---
+### Decision: Current progress on asia-supply sign-up implementation:
+
+COMPLETED:
+- Full sign-up flow: two-screen 
+
+**Date:** 2026-02-13
+**Context:** Current progress on asia-supply sign-up implementation:
+**Decision:** Current progress on asia-supply sign-up implementation:
+
+COMPLETED:
+- Full sign-up flow: two-screen (form → OTP verification)
+- Files created: src/lib/supabase/client.ts, src/lib/supabase/server.ts, src/types/auth.ts, src/lib/validations/auth.ts, src/app/api/auth/signup/route.ts, src/components/auth/sign-up-form.tsx, src/components/auth/otp-input.tsx, src/components/auth/otp-verification.tsx, src/components/auth/auth-link.tsx, src/app/(auth)/layout.tsx, src/app/(auth)/sign-up/page.tsx
+- Updated: globals.css (brand colors blue-600 primary oklch), layout.tsx (Toaster + metadata), .env.example (Supabase vars)
+- Installed: @supabase/ssr, @supabase/supabase-js, sonner, shadcn components (button, input, label, card, sonner)
+- TypeScript compiles cleanly
+
+ARCHITECTURE DECISIONS:
+- Supabase built-in OTP (not custom otp_codes table, no Resend)
+- API route POST /api/auth/signup uses admin.createUser() + signInWithOtp()
+- Client-side verifyOtp() and resend via signInWithOtp()
+- Auth layout: split-screen (form left, brand gradient right panel with stats)
+- Brand gradient CTA button: from-blue-600 to-indigo-600
+- Zod v4 + React Hook Form v7 + @hookform/resolvers v5
+- Validation mode: onBlur, button disabled until all fields populated (via watch())
+
+PENDING/TODO:
+- User needs to add .env.local with Supabase keys (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY)
+- User needs to configure Supabase Magic Link email template with {{ .Token }} for OTP codes
+- Provided branded HTML email template for the OTP
+- Sign-in page not yet built
+- /onboarding page not yet built
+- No middleware for auth session refresh yet
+- No profiles table migration yet
+**Reasoning:** 
+
+---
+### Decision: Asia Supply Partners is a Next.js 16 + React 19 web app for a Hong Kong-based sourcing company (Asia
+
+**Date:** 2026-02-15
+**Context:** Asia Supply Partners is a Next
+**Decision:** Asia Supply Partners is a Next.js 16 + React 19 web app for a Hong Kong-based sourcing company (Asia Supply Partners Limited). Tech stack: Next.js 16 App Router, React 19, Supabase (auth + DB), TanStack Query, Tailwind CSS v4, shadcn/ui, Zod v4, react-hook-form, sonner for toasts. Component architecture uses atomic design (atoms/molecules/organisms/templates). Currently on 'setup' branch building auth flows (signup with OTP verification). Brand colors: blue-600 primary, slate neutrals. The project has a comprehensive skills system in .agents/skills/ for guiding implementation patterns.
+**Reasoning:** 
+
+---
+### Decision: Session summary: Fixed PR feedback for asia-supply auth implementation. Created API_ROUTES constants
+
+**Date:** 2026-02-16
+**Context:** Session summary: Fixed PR feedback for asia-supply auth implementation
+**Decision:** Session summary: Fixed PR feedback for asia-supply auth implementation. Created API_ROUTES constants in src/lib/constants/api.ts, extracted formatTime utility to src/lib/utils/time.ts, changed auth layout div to semantic main tag, and added environment variable validation via src/lib/env.ts with lazy getters. All PR issues resolved - extracted hardcoded API endpoints, time formatting logic, used semantic HTML, and added env validation that works with Next.js module initialization.
+**Reasoning:** 
+
+---
+### Decision: Session summary: Built and debugged the complete sign-up + OTP verification flow for Asia Supply. Ke
+
+**Date:** 2026-02-16
+**Context:** Session summary: Built and debugged the complete sign-up + OTP verification flow for Asia Supply
+**Decision:** Session summary: Built and debugged the complete sign-up + OTP verification flow for Asia Supply. Key bugs fixed and lessons learned:
+
+1. **Next.js env vars — dynamic access breaks client-side**: `process.env[key]` (dynamic lookup) returns undefined in the browser. Next.js only inlines `NEXT_PUBLIC_*` vars when accessed as static string literals like `process.env.NEXT_PUBLIC_SUPABASE_URL`. Fixed by removing the `getEnvVar(key)` helper and using direct static access in `src/lib/env.ts`.
+
+2. **Supabase email_confirm: true vs false — affects token type**: `admin.createUser({ email_confirm: true })` auto-confirms the user. Then `signInWithOtp()` sends a magic link (recovery token, stored in `recovery_token` field). `admin.createUser({ email_confirm: false })` leaves user unconfirmed, and `signInWithOtp()` sends a confirmation email (stored in `confirmation_token` field). The PRD requires unverified creation, so `email_confirm: false` is correct.
+
+3. **verifyOtp type must match token type**: With `email_confirm: false` + `signInWithOtp()`, the token is a confirmation type. Use `verifyOtp({ type: 'email' })`. With `email_confirm: true`, the token is recovery/magiclink type, requiring `verifyOtp({ type: 'magiclink' })`. Final correct combo: `email_confirm: false` + `type: 'email'`.
+
+4. **Supabase Email OTP Length setting**: Set to 6 in dashboard. Only affects OTP tokens generated via `{{ .Token }}` template variable. The email template must be in the correct tab: "Confirm signup" tab for `email_confirm: false` flow, "Magic Link" tab for `email_confirm: true` flow.
+
+5. **Unconfirmed user re-signup**: If user signs up but doesn't verify OTP, then tries to sign up again, `admin.createUser()` returns "already exists". Fixed by checking if existing user is unconfirmed and resending OTP instead of blocking. Watch for Supabase rate limit (60s between OTP requests per email).
+
+6. **handle_user_verified trigger**: Fires on `auth.users` AFTER UPDATE when `email_confirmed_at` transitions from NULL to non-NULL. Updates `profiles.email_verified = true`. Only needed for `email_confirm: false` flow. With `email_confirm: true`, the trigger needs `last_sign_in_at` check instead (but we don't use that flow).
+
+7. **ZOBI/Gemini bot PR reviews can be wrong**: The bot flagged `type: 'magiclink'` as wrong and suggested reverting `getEnvVar` — both suggestions were incorrect. Always verify bot feedback against actual tested behavior.
+**Reasoning:** 
+**Alternatives:** blocking.
+
+---
+### Decision: Session summary: Built the complete sign-in flow for asia-supply, mirroring the existing sign-up pat
+
+**Date:** 2026-02-16
+**Context:** Session summary: Built the complete sign-in flow for asia-supply, mirroring the existing sign-up patterns exactly
+**Decision:** Session summary: Built the complete sign-in flow for asia-supply, mirroring the existing sign-up patterns exactly. Created: sign-in API route (POST /api/auth/signin — validates email, checks user existence via admin.listUsers(), blocks admin accounts, sends OTP), sign-in form component (email-only with Zod validation, gradient Continue button, "not registered" error links to sign-up), sign-in OTP component (reuses OTPInput, has Change button for email, 10min expiry + 60s resend cooldown, redirects to /dashboard on success with toast), sign-in page (two-step email→otp flow), sign-out API route (POST /api/auth/signout via server client), middleware (session refresh via @supabase/ssr, protects non-public routes, redirects auth users away from sign-in/sign-up to /dashboard, 7-day cookie expiry), and placeholder dashboard page. TypeScript compiles cleanly.
+**Reasoning:** 
+
+---
+### Decision: How to configure custom SMTP (Resend) and rate limits on Supabase when hitting "email rate limit exc
+
+**Date:** 2026-02-17
+**Context:** How to configure custom SMTP (Resend) and rate limits on Supabase when hitting "email rate limit exceeded" errors:
+**Decision:** How to configure custom SMTP (Resend) and rate limits on Supabase when hitting "email rate limit exceeded" errors:
+
+## Problem
+Default Supabase SMTP has very low rate limits (2-4 emails/hour). OTP/magic link flows hit 429 "over_email_send_rate_limit" quickly during development/testing.
+
+## Solution: Supabase Management API
+The Supabase MCP server does NOT have a tool for updating auth config. Use the Management API directly via curl:
+
+```bash
+# Get access token from https://supabase.com/dashboard/account/tokens
+export SUPABASE_ACCESS_TOKEN="sbp_..."
+export PROJECT_REF="your-project-ref"
+
+# Configure custom SMTP + rate limits in one PATCH call
+curl -s -X PATCH "https://api.supabase.com/v1/projects/$PROJECT_REF/config/auth" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "external_email_enabled": true,
+    "smtp_admin_email": "onboarding@resend.dev",
+    "smtp_host": "smtp.resend.com",
+    "smtp_port": "587",
+    "smtp_user": "resend",
+    "smtp_pass": "re_YOUR_RESEND_API_KEY",
+    "smtp_sender_name": "Your App Name",
+    "rate_limit_email_sent": 100,
+    "rate_limit_otp": 100
+  }'
+```
+
+## Verify config was applied
+```bash
+curl -s "https://api.supabase.com/v1/projects/$PROJECT_REF/config/auth" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" | jq '{smtp_host, smtp_user, smtp_admin_email, smtp_sender_name, rate_limit_email_sent, rate_limit_otp}'
+```
+
+## Key details
+- Resend SMTP: host=smtp.resend.com, port=587, user="resend", pass=your Resend API key
+- smtp_port must be a string "587" not integer
+- Dashboard SMTP settings sometimes don't apply — Management API is more reliable
+- Default rate_limit_otp is 30/hr, rate_limit_email_sent is ~2-4/hr on built-in SMTP
+- After switching to custom SMTP, default email rate limit starts at 30/hr — set higher explicitly
+- Check auth logs for "over_email_send_rate_limit" error_code to confirm rate limiting
+- Always rotate access tokens and API keys after using them in terminals/conversations
+
+## Debugging
+Check auth logs via Supabase MCP: get_logs(project_id, service: "auth") and grep for "rate_limit" or "smtp"
+**Reasoning:** 
+**Alternatives:** _email_send_rate_limit" quickly during development/testing.
+
+---
+### Decision: Session summary: Fixed two bugs in onboarding flow. (1) Hydration mismatch — OnboardingProvider was 
+
+**Date:** 2026-02-19
+**Context:** Session summary: Fixed two bugs in onboarding flow
+**Decision:** Session summary: Fixed two bugs in onboarding flow. (1) Hydration mismatch — OnboardingProvider was reading localStorage in useState initializers causing server/client mismatch. Fixed by deferring all localStorage reads to useEffect with isLoading state. (2) Data leaking between users — localStorage key was global, not per-user. Fixed by adding userId to stored data and validating on load, clearing stale data on mismatch. Also fixed middleware (ASP-B-4) to check subscription_id/is_vip before allowing dashboard access, preventing users from bypassing payment via browser back button.
+**Reasoning:** 
+
+---
+### Decision: React 19 pattern: useRef() without arguments causes TS error "Expected 1 arguments, but got 0". Alwa
+
+**Date:** 2026-02-19
+**Context:** React 19 pattern: useRef() without arguments causes TS error "Expected 1 arguments, but got 0"
+**Decision:** React 19 pattern: useRef() without arguments causes TS error "Expected 1 arguments, but got 0". Always pass explicit initial value: useRef<T>(undefined) or useRef<T>(null). Also, never read localStorage in useState initializers for SSR/hydration safety — always defer to useEffect.
+**Reasoning:** 
+
+---
+

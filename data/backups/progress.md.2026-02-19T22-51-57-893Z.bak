@@ -1,0 +1,53 @@
+---
+created: '2026-02-19'
+updated: '2026-02-19'
+status: |-
+  Hook: Ran: npm test 2>&1
+  [Updated 2026-02-19]: Ran: npm test 2>&1
+---
+
+- [x] CODEBASE ANALYSIS: Anthropic SDK usage in Cowork-Orchestrator
+
+KEY FINDINGS:
+
+1. **SDK Version**: @anthropic-ai/sdk@^0.74.0
+
+2. **FILES USING ANTHROPIC SDK** (6 files):
+   - src/agents/claude-agent.ts
+   - src/agents/tool-agent.ts
+   - src/intelligence/task-decomposer.ts
+   - src/intelligence/agent-selector.ts
+   - src/intelligence/conflict-resolver.ts
+   - src/core/orchestrator.ts
+
+3. **ANTHROPIC TYPES USED**:
+   - Anthropic.Message
+   - Anthropic.MessageParam (for message building)
+   - Anthropic.Tool (tool definitions)
+   - Anthropic.ToolUseBlock
+   - Anthropic.TextBlock
+   - Anthropic.ToolResultBlockParam
+   - Anthropic.APIError (for error handling)
+   - Anthropic class (default import for client instantiation)
+
+4. **MODELS REFERENCED**:
+   - claude-sonnet-4-5-20250929
+   - claude-sonnet-4-20250514
+   - claude-opus-4-6
+   - claude-haiku-4-5-20251001
+
+5. **KEY PATTERNS**:
+   - Client instantiation: `new Anthropic()` in OrchestrationEngine.ts
+   - Message creation: `client.messages.create()`
+   - Retry logic: catches `Anthropic.APIError` and checks `.status` for [429, 500, 529]
+   - Tool usage: `tool_choice: { type: 'tool', name: 'toolname' }`
+   - Response parsing: iterates `response.content` array checking block types
+   - Token tracking: `response.usage.input_tokens` and `response.usage.output_tokens`
+
+6. **NO TEST MOCKING**: Tests use custom MockAgent class - no Anthropic SDK mocking
+
+7. **CONFIG**:
+   - .env.example contains ANTHROPIC_API_KEY=your-key-here
+   - No .env file exists (will be created at runtime)
+   - Zod v4.3.6 used for validation
+   - EventEmitter3 v5 for agent communication (completed 2/20/2026)

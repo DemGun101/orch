@@ -1,0 +1,82 @@
+---
+created: '2026-02-17'
+updated: '2026-02-17'
+last_updated: '2026-02-17'
+---
+### Decision: Phase 0 progress for cowork-orchestrator:
+
+Phase 0.1 (Project Init): Complete — scaffolded project a
+
+**Date:** 2026-02-17
+**Context:** Phase 0 progress for cowork-orchestrator:
+**Decision:** Phase 0 progress for cowork-orchestrator:
+
+Phase 0.1 (Project Init): Complete — scaffolded project at orch/cowork-orchestrator with TypeScript, Vitest, Winston, Zod v4, better-sqlite3, uuid, eventemitter3, @anthropic-ai/sdk. tsconfig targets ES2022 with NodeNext modules, strict mode.
+
+Phase 0.2 (Directory Structure): Complete — created src/, tests/, examples/, skills/ directories plus subdirectories.
+
+Phase 0.3 (Core Types): Complete — implemented src/core/types.ts with all 20 foundational types: TaskStatus, TaskPriority, AgentStatus, Task, TaskMetadata, TaskResult, AgentCapability, AgentConfig, AgentSelectorConfig, AgentMessage, Workflow, WorkflowNode, WorkflowEdge, WorkflowResult, ToolDefinition, ToolResult, ToolCall, OrchestratorConfig, AuditEntry. Used z.ZodType (not z.ZodSchema) for Zod v4 compatibility. Compiles cleanly with tsc --noEmit. No git commit yet.
+**Reasoning:** 
+
+---
+### Decision: Phase 1.1 (Config & Persistence) complete for cowork-orchestrator:
+
+1. src/config/schema.ts — Zod v4
+
+**Date:** 2026-02-17
+**Context:** Phase 1
+**Decision:** Phase 1.1 (Config & Persistence) complete for cowork-orchestrator:
+
+1. src/config/schema.ts — Zod v4 schemas validating OrchestratorConfig with defaults (maxConcurrentAgents:10, maxConcurrentTasks:50, defaultTimeout:300000, checkpointInterval:30000, rateLimits:{rpm:60,tpm:100000}, persistence:{enabled:true, dbPath:'./data/orchestrator.db'}). Exports DEFAULT_CONFIG and validateConfig().
+
+2. src/config/defaults.ts — Re-exports DEFAULT_CONFIG and validateConfig from schema.ts.
+
+3. src/memory/persistence.ts — PersistenceLayer class using better-sqlite3 with WAL mode. Tables: tasks, agents, messages, checkpoints, audit_log (with indexes). Full CRUD for tasks/agents/messages, saveCheckpoint/getLatestCheckpoint, appendAuditLog/queryAuditLog. Custom PersistenceError class. AuditEntry.workflowId stored in data JSON column. All methods wrapped in try/catch. Compiles cleanly with tsc --noEmit.
+**Reasoning:** 
+
+---
+### Decision: Phase 1.2 (Memory & Comms) complete for cowork-orchestrator:
+
+1. persistence.ts updated — added shar
+
+**Date:** 2026-02-17
+**Context:** Phase 1
+**Decision:** Phase 1.2 (Memory & Comms) complete for cowork-orchestrator:
+
+1. persistence.ts updated — added shared_memory table (key/value store) and conversation_messages table with CRUD methods (setSharedValue, getSharedValue, deleteSharedValue, listSharedValues, saveConversationMessage, getConversationMessages, clearConversationMessages).
+
+2. shared-memory.ts — SharedMemoryStore class: in-memory Map with namespaced composite keys, PersistenceLayer backing, AsyncLock for async safety, glob-pattern subscriptions, EventEmitter3 change/delete events, restore() from DB.
+
+3. conversation-history.ts — ConversationHistory class: per-agent message arrays, token estimation (chars/4), trimToTokenBudget preserves system message, placeholder summarize(), PersistenceLayer backing with restore().
+
+4. protocols.ts — CHANNELS constants (task/status/negotiation/system/data), factory functions (createMessage, createRequest, createResponse, createBroadcast, createDelegation), Zod validateMessage().
+
+5. message-bus.ts — MessageBus class: channel-based subscriptions per agent, publish routes by to field (* = broadcast), request/response with timeout via EventEmitter correlation, per-channel history (default 100), dead letter queue, delivery metrics.
+
+6. negotiation.ts — NegotiationManager: requestDelegation via MessageBus request/response, proposeTaskSplit broadcasts proposal (Phase 2 AI), resolveContention queries candidates for availability/load scoring.
+
+All compile cleanly with tsc --noEmit. Used eventemitter3 v5 named import {EventEmitter}.
+**Reasoning:** 
+
+---
+### Decision: Phase 1.3 (Agent Classes) complete for cowork-orchestrator:
+
+1. base-agent.ts — Abstract BaseAgent c
+
+**Date:** 2026-02-17
+**Context:** Phase 1
+**Decision:** Phase 1.3 (Agent Classes) complete for cowork-orchestrator:
+
+1. base-agent.ts — Abstract BaseAgent class: config-driven (AgentConfig), status tracking, currentTasks Map, canHandle (capability name matching), getLoad (ratio), assignTask/completeTask/failTask lifecycle, onMessage (overridable no-op), getStats (completed/failed/avgTime/errorRate). Optional setMessageBus/setHistory integration. Uses eventemitter3.
+
+2. claude-agent.ts — ClaudeAgent extends BaseAgent: takes Anthropic client instance, execute() builds messages from conversation history + task, calls API with retry on 429/500/529 (3 retries, exponential delays), extracts text + tool_use blocks, tracks token usage, auto-trims history to 80% of model context limit. chat() single-turn convenience method. Anthropic SDK types: Anthropic.MessageParam, Anthropic.Tool, Anthropic.Message, Anthropic.APIError all accessible from default import namespace.
+
+3. tool-agent.ts — ToolAgent extends ClaudeAgent: manages ToolDefinition[], overrides execute() with tool_use loop (max 10 iterations), converts ToolDefinition.inputSchema to Anthropic.Tool format, stub tool execution returns tool name + input as JSON string, sends tool_result blocks back to Claude until final text response. registerTool/removeTool.
+
+4. human-in-the-loop.ts — HumanInTheLoopAgent extends BaseAgent: approval gate pattern, execute() returns Promise waiting for approve()/reject() calls, configurable timeout (default 5min) auto-rejects, emits 'approval-needed' event, getPendingApprovals(), onApprovalNeeded() listener helper.
+
+All compile cleanly with tsc --noEmit.
+**Reasoning:** 
+
+---
+
