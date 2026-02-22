@@ -1,13 +1,11 @@
 import type {
-  Task,
   TaskResult,
   Workflow,
   WorkflowEdge,
   WorkflowNode,
   WorkflowResult,
+  NodeExecutor,
 } from './types.js';
-import type { TaskManager } from './task-manager.js';
-import type { AgentRegistry } from './agent-registry.js';
 import type { PersistenceLayer } from '../memory/persistence.js';
 import type { CheckpointManager } from '../resilience/checkpointing.js';
 
@@ -32,7 +30,6 @@ export function validateDAG(
 ): { valid: boolean; error?: string } {
   const nodeIds = new Set(nodes.map((n) => n.id));
 
-  // Validate edge references
   for (const edge of edges) {
     if (!nodeIds.has(edge.from)) {
       return { valid: false, error: `Edge references unknown source node: ${edge.from}` };
@@ -60,7 +57,7 @@ export function validateDAG(
   function dfs(nodeId: string): boolean {
     color.set(nodeId, GRAY);
     for (const neighbor of adjacency.get(nodeId)!) {
-      if (color.get(neighbor) === GRAY) return true; // back edge = cycle
+      if (color.get(neighbor) === GRAY) return true;
       if (color.get(neighbor) === WHITE && dfs(neighbor)) return true;
     }
     color.set(nodeId, BLACK);
@@ -94,7 +91,6 @@ export function topologicalSort(
     inDegree.set(edge.to, (inDegree.get(edge.to) ?? 0) + 1);
   }
 
-  // Kahn's algorithm
   const queue: string[] = [];
   for (const [id, deg] of inDegree) {
     if (deg === 0) queue.push(id);
@@ -120,9 +116,6 @@ function evaluateCondition(
   condition: string,
   context: Record<string, unknown>,
 ): boolean {
-  // Simple dot-path accessor with comparison operators
-  // Supports: "path.to.value == expected", "path.to.value != expected",
-  //           "path.to.value" (truthy check)
   const operators = ['===', '!==', '==', '!=', '>=', '<=', '>', '<'];
   let op: string | undefined;
   let parts: [string, string] | undefined;
@@ -140,14 +133,12 @@ function evaluateCondition(
   }
 
   if (!parts || !op) {
-    // Truthy check on path
     return !!resolvePath(context, condition.trim());
   }
 
   const leftValue = resolvePath(context, parts[0]);
   let rightValue: unknown = parts[1];
 
-  // Parse right side: booleans, numbers, quoted strings, null
   if (rightValue === 'true') rightValue = true;
   else if (rightValue === 'false') rightValue = false;
   else if (rightValue === 'null') rightValue = null;
@@ -192,19 +183,16 @@ function resolvePath(obj: Record<string, unknown>, path: string): unknown {
 // ─── Workflow Engine ────────────────────────────────────────────────
 
 export class WorkflowEngine {
-  private taskManager: TaskManager;
-  private agentRegistry: AgentRegistry;
+  private nodeExecutor: NodeExecutor;
   private persistence?: PersistenceLayer;
   private checkpointManager?: CheckpointManager;
   private activeWorkflows = new Map<string, ActiveWorkflow>();
 
   constructor(
-    taskManager: TaskManager,
-    agentRegistry: AgentRegistry,
+    nodeExecutor: NodeExecutor,
     persistence?: PersistenceLayer,
   ) {
-    this.taskManager = taskManager;
-    this.agentRegistry = agentRegistry;
+    this.nodeExecutor = nodeExecutor;
     this.persistence = persistence;
   }
 
@@ -215,7 +203,6 @@ export class WorkflowEngine {
   async execute(workflow: Workflow): Promise<WorkflowResult> {
     const startTime = Date.now();
 
-    // Validate the DAG
     const validation = validateDAG(workflow.nodes, workflow.edges);
     if (!validation.valid) {
       return {
@@ -228,7 +215,6 @@ export class WorkflowEngine {
       };
     }
 
-    // Initialize active workflow state
     const nodeStatuses = new Map<string, NodeStatus>();
     const nodeOutputs = new Map<string, TaskResult>();
     for (const node of workflow.nodes) {
@@ -243,7 +229,6 @@ export class WorkflowEngine {
     };
     this.activeWorkflows.set(workflow.id, active);
 
-    // Build adjacency for quick lookups
     const incomingEdges = new Map<string, WorkflowEdge[]>();
     for (const node of workflow.nodes) {
       incomingEdges.set(node.id, []);
@@ -252,7 +237,6 @@ export class WorkflowEngine {
       incomingEdges.get(edge.to)!.push(edge);
     }
 
-    // Execute the DAG
     return new Promise<WorkflowResult>((resolve) => {
       active.resolve = resolve;
 
@@ -317,7 +301,7 @@ export class WorkflowEngine {
           return;
         }
 
-        // Phase 3: Find ready nodes (pending + all incoming edges satisfied)
+        // Phase 3: Find ready nodes
         const readyNodes: WorkflowNode[] = [];
         for (const node of workflow.nodes) {
           if (nodeStatuses.get(node.id) !== 'pending') continue;
@@ -358,7 +342,6 @@ export class WorkflowEngine {
     const active = this.activeWorkflows.get(workflowId);
     if (active && active.status === 'paused') {
       active.status = 'running';
-      // Re-trigger processing by resolving ready nodes
       this.resumeExecution(active);
     }
   }
@@ -383,14 +366,12 @@ export class WorkflowEngine {
 
     active.status = 'cancelled';
 
-    // Cancel all pending/running tasks
     for (const [nodeId, status] of active.nodeStatuses) {
       if (status === 'pending' || status === 'running') {
         active.nodeStatuses.set(nodeId, 'cancelled');
       }
     }
 
-    // Resolve the workflow promise
     if (active.resolve) {
       const nodesCompleted = Array.from(active.nodeStatuses.values()).filter(
         (s) => s === 'completed',
@@ -419,63 +400,28 @@ export class WorkflowEngine {
 
     active.nodeStatuses.set(node.id, 'running');
 
-    // Create a real task from the node template
-    const task = this.taskManager.createTask({
-      name: node.taskTemplate.name,
-      description: node.taskTemplate.description,
-      priority: node.taskTemplate.priority,
-      input: { ...node.taskTemplate.input, ...active.workflow.context },
-      dependencies: node.taskTemplate.dependencies,
-      timeout: node.taskTemplate.timeout,
-    });
-    this.taskManager.submitTask(task);
-    this.taskManager.updateStatus(task.id, 'assigned');
-
-    // Find the best agent
-    const agent = this.agentRegistry.findBestMatch(task);
-    if (!agent) {
-      active.nodeStatuses.set(node.id, 'failed');
-      active.nodeOutputs.set(node.id, {
-        taskId: task.id,
-        success: false,
-        output: {},
-        error: 'No agent available to handle this task',
-        duration: 0,
-      });
-      this.taskManager.updateStatus(task.id, 'failed');
-      return;
-    }
-
-    // Execute the task
-    this.taskManager.updateStatus(task.id, 'running');
-    agent.assignTask(task);
-
     try {
-      const result = await agent.execute(task);
-      agent.completeTask(task.id, result);
+      // Delegate to the injected NodeExecutor callback
+      const result = await this.nodeExecutor(node, active.workflow.context);
 
       if (result.success) {
         active.nodeStatuses.set(node.id, 'completed');
         active.nodeOutputs.set(node.id, result);
-        this.taskManager.updateStatus(task.id, 'completed', result.output);
-        // Pass output into workflow context
+        // Pass output into workflow context for successor nodes
         active.workflow.context[node.id] = result.output;
       } else {
         active.nodeStatuses.set(node.id, 'failed');
         active.nodeOutputs.set(node.id, result);
-        this.taskManager.updateStatus(task.id, 'failed');
       }
     } catch (error) {
-      agent.failTask(task.id, error instanceof Error ? error.message : String(error));
       active.nodeStatuses.set(node.id, 'failed');
       active.nodeOutputs.set(node.id, {
-        taskId: task.id,
+        taskId: node.id,
         success: false,
         output: {},
         error: error instanceof Error ? error.message : String(error),
         duration: 0,
       });
-      this.taskManager.updateStatus(task.id, 'failed');
     }
   }
 
@@ -516,7 +462,6 @@ export class WorkflowEngine {
   }
 
   private resumeExecution(active: ActiveWorkflow): void {
-    // Build incoming edges map
     const incomingEdges = new Map<string, WorkflowEdge[]>();
     for (const node of active.workflow.nodes) {
       incomingEdges.set(node.id, []);
@@ -528,7 +473,6 @@ export class WorkflowEngine {
     const processReadyNodes = () => {
       if (active.status !== 'running') return;
 
-      // Phase 1: Resolve skippable nodes (cascading)
       let madeProgress = true;
       while (madeProgress) {
         madeProgress = false;
@@ -559,7 +503,6 @@ export class WorkflowEngine {
         }
       }
 
-      // Phase 2: Check for completion
       const statuses = Array.from(active.nodeStatuses.values());
       const hasFailure = statuses.some((s) => s === 'failed');
       const allDone = statuses.every(
@@ -583,7 +526,6 @@ export class WorkflowEngine {
         return;
       }
 
-      // Phase 3: Find ready nodes
       const readyNodes: WorkflowNode[] = [];
       for (const node of active.workflow.nodes) {
         if (active.nodeStatuses.get(node.id) !== 'pending') continue;
