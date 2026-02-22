@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { OrchestratorConfig } from '../core/types.js';
+import type { CoworkConfig } from '../core/types.js';
 
 // ─── Sub-schemas ────────────────────────────────────────────────────
 
@@ -9,32 +9,33 @@ const RateLimitsSchema = z.object({
 });
 
 const PersistenceSchema = z.object({
-  enabled: z.boolean().default(true),
+  enabled: z.boolean().default(false),
   dbPath: z.string().default('./data/orchestrator.db'),
 });
 
 // ─── Main Config Schema ────────────────────────────────────────────
 
-const OrchestratorConfigSchema = z.object({
-  maxConcurrentAgents: z.number().int().positive().default(10),
-  maxConcurrentTasks: z.number().int().positive().default(50),
-  defaultTimeout: z.number().int().positive().default(300_000),
-  checkpointInterval: z.number().int().positive().default(30_000),
+const CoworkConfigSchema = z.object({
+  maxConcurrency: z.number().int().positive().default(5),
+  defaultTimeout: z.number().int().positive().default(600_000),
   rateLimits: RateLimitsSchema.default({
     requestsPerMinute: 60,
     tokensPerMinute: 100_000,
   }),
   persistence: PersistenceSchema.default({
-    enabled: true,
+    enabled: false,
     dbPath: './data/orchestrator.db',
   }),
+  defaultModel: z.string().default('claude-sonnet-4-6'),
+  plannerModel: z.string().default('claude-opus-4-6'),
+  cwd: z.string().optional(),
+  maxFeedbackIterations: z.number().int().nonnegative().default(2),
 });
 
 // ─── Exports ────────────────────────────────────────────────────────
 
-export const DEFAULT_CONFIG: OrchestratorConfig =
-  OrchestratorConfigSchema.parse({});
+export const DEFAULT_CONFIG: CoworkConfig = CoworkConfigSchema.parse({});
 
-export function validateConfig(input: unknown): OrchestratorConfig {
-  return OrchestratorConfigSchema.parse(input);
+export function validateConfig(input: unknown): CoworkConfig {
+  return CoworkConfigSchema.parse(input);
 }
